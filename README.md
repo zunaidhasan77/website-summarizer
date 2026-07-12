@@ -1,59 +1,60 @@
-AI Website Summarizer
-A robust, full-stack web application that fetches website content and provides concise summaries using AI. The application is designed for reliability, featuring model-switching between cloud-based AI and local models to ensure you never face downtime.
+# 🌐 AI Website Summarizer
 
-🚀 Key Features
-HTML Scraping: Cleans raw website data to extract readable text, ignoring scripts, styles, and navigation junk.
+A robust, full-stack web application designed to fetch website content and provide concise AI-driven summaries. This project prioritizes reliability and privacy by utilizing a dual-model architecture.
 
-Dual-AI Architecture: * Cloud Mode: Uses Gemini API for fast, high-quality summarization.
+## 🚀 Key Features
 
-Local Mode: Uses Ollama (running llama3) for private, unlimited, and offline summarization.
+* **HTML Scraping:** Cleans raw website data to extract readable text, ignoring scripts, styles, and navigation noise.
+* **Dual-AI Architecture:**
+    * **Cloud Mode:** Uses Google Gemini API for fast, high-quality summarization.
+    * **Local Mode:** Uses Ollama (running `llama3`) for private, unlimited, and offline processing.
+* **Intelligent Failover:** Automatically detects if the Gemini API is rate-limited or unavailable and seamlessly switches to your local Ollama instance with real-time UI updates.
+* **Dynamic UI:** Real-time status notifications keep you informed when the system switches models or encounters errors.
 
-Intelligent Failover: Automatically detects if the Gemini API is rate-limited or unavailable and seamlessly switches to your local Ollama instance.
+## 🛠 Tech Stack
 
-Dynamic UI: Real-time status notifications keep the user informed when the system switches models.
+* **Backend:** Go (Golang)
+* **Frontend:** HTML5, CSS3, Vanilla JavaScript
+* **AI Engines:** Google Gemini API, Ollama (Llama3)
+* **Infrastructure:** Local HTTP server
 
-🛠 Tech Stack
-Backend: Go (Golang)
+## 🧠 System Architecture
 
-Frontend: HTML5, CSS3, Vanilla JavaScript
 
-AI Engines: Google Gemini API, Ollama (Llama3)
 
-Scraping: Standard Go net/http with Regex text cleaning
+The application employs a "Traffic Controller" pattern where the frontend manages the failover logic, ensuring a smooth user experience even if a cloud provider goes down.
 
-⚙️ Installation & Setup
-1. Prerequisites
-Go installed on your system.
+## ⚙️ Installation & Setup
 
-Ollama installed and running locally.
+### 1. Prerequisites
+* [Go](https://go.dev/)
+* [Ollama](https://ollama.com/)
 
-A valid Gemini API Key.
+### 2. Setup
+1. **Clone the repository:**
+   ```bash
+   git clone <your-repo-url>
+   cd website-summarizer
+2. **Download the local model:**
+   ```bash
+   ollama pull llama3
+3. **Configure API Key:**
+   Ensure your GEMINI_API_KEY is set in your environment variables.
+4. **Run the Application**
+   ```bash
+   go run cmd/api/main.go
+5. **Access the interface:**
+   Open your browser to http://localhost:8080.
 
-2. Setup
-Clone the repository:
+## How it Works
+**Scrape:** The Go backend fetches the URL and cleans the HTML tags using Regex to ensure only readable text is processed.
 
-Bash
-git clone <your-repo-url>
-cd website-summarizer
-Pull the required local model:
+**Route:** The UI sends the URL and your preferred model to the backend.
 
-Bash
-ollama pull llama3
-Set your Gemini API key (ensure your environment variable is set in your main.go or config):
+**Summarize & Failover:**
 
-Bash
-export GEMINI_API_KEY="your_api_key_here"
-3. Running the App
-Start the backend:
+* If Gemini is selected and succeeds, you get your result.
 
-Bash
-go run cmd/api/main.go
-Open your browser and navigate to http://localhost:8080.
+* If Gemini fails, the frontend dynamically alerts you ("Gemini failed, switching to local Ollama...") and triggers a secondary request to Ollama.
 
-🧠 Architecture Overview
-The application follows a "Traffic Controller" pattern where the frontend manages the failover logic, ensuring the user experience remains smooth even if one service provider goes down.
-
-📝 License
-This project is open-source and intended for personal learning and productivity enhancement.
-
-This README covers everything you've built! Does this look like a good summary of your project, or would you like to add anything else?
+**Display:** The summary is injected into the clean UI with real-time status updates that automatically fade after the response is received.
