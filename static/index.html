@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Website Summarizer</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background-color: #121212;
+            color: #eee;
+            display: flex;
+            justify-content: center;
+            padding: 50px;
+        }
+
+        .card {
+            background: #1e1e1e;
+            padding: 30px;
+            border-radius: 12px;
+            width: 100%;
+            max-width: 500px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border-radius: 6px;
+            border: 1px solid #333;
+            background: #2c2c2c;
+            color: white;
+            box-sizing: border-box;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background: #bb86fc;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button:disabled {
+            background: #555;
+        }
+
+        #loader {
+            display: none;
+            text-align: center;
+            margin-top: 15px;
+            color: #bb86fc;
+        }
+
+        #result {
+            margin-top: 20px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            color: #ccc;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="card">
+        <h2>Web Summarizer</h2>
+        <input type="url" id="urlInput" placeholder="https://example.com">
+        <button id="btn" onclick="summarize()">Summarize Website</button>
+        <div id="loader">Processing... this might take a while.</div>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        async function summarize() {
+            const btn = document.getElementById('btn');
+            const loader = document.getElementById('loader');
+            const result = document.getElementById('result');
+            const url = document.getElementById('urlInput').value;
+
+            btn.disabled = true;
+            loader.style.display = 'block';
+            result.innerText = '';
+
+            try {
+                const res = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url })
+                });
+                const data = await res.json();
+                // ADD THIS LINE TO DEBUG:
+                console.log("Server response:", data);
+
+                // Check if the property exists
+                if (data.gemini_summary) {
+                    result.innerText = data.gemini_summary;
+                } else {
+                    result.innerText = "Error: API did not return 'gemini_summary'. Check console.";
+                }
+            } catch (e) {
+                result.innerText = "Error connecting to server.";
+            } finally {
+                btn.disabled = false;
+                loader.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+
+</html>

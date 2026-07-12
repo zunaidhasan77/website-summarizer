@@ -2,42 +2,38 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
+	"log"
 	"net/http"
-
 	"website-summarizer/internal/models"
 	"website-summarizer/internal/services"
 )
 
-// HandleChat processes incoming POST requests for the AI agent
 func HandleChat(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// Enforce POST method rules
-	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		json.NewEncoder(w).Encode(models.APIResponse{Success: false, Error: "Method not allowed"})
-		return
-	}
-
-	// Decode the incoming JSON payload
 	var req models.UserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(models.APIResponse{Success: false, Error: "Invalid JSON payload"})
+		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request"})
 		return
 	}
 
-	// Call the Gemini service layer
-	answer, err := services.AskGemini(req.Prompt)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(models.APIResponse{Success: false, Error: err.Error()})
+	// 1. Scrape
+	content, err := services.FetchWebpage(req.URL)
+	if err != nil || content == "" {
+		json.NewEncoder(w).Encode(map[string]string{"error": "Could not scrape website"})
 		return
 	}
 
-	// Return successful response
-	json.NewEncoder(w).Encode(models.APIResponse{
-		Success: true,
-		Answer:  answer,
-	})
+	// 2. Summarize (Add error checking here!)
+	prompt := fmt.Sprintf("Summarize this in 3 sentences: %s", content)
+	answer, err := services.AskGemini(prompt) // Ensure this returns an error
+	if err != nil || answer == "" {
+		log.Printf("Gemini Error: %v", err) // Check your terminal for this!
+		json.NewEncoder(w).Encode(map[string]string{"error": "Gemini failed to generate summary"})
+		return
+	}
+
+	// 3. Respond
+	json.NewEncoder(w).Encode(map[string]string{"gemini_summary": answer})
 }

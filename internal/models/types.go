@@ -1,13 +1,11 @@
 package models
 
-// UserRequest handles the incoming payload from the user or UI
 type UserRequest struct {
-	Prompt string `json:"prompt"`
+	URL string `json:"url"`
 }
 
-// APIResponse structures the JSON sent back to the client
 type APIResponse struct {
-	Success bool   `json:"success"`
-	Answer  string `json:"answer"`
-	Error   string `json:"error,omitempty"`
+	Success       bool   `json:"success"`
+	GeminiSummary string `json:"gemini_summary,omitempty"`
+	Error         string `json:"error,omitempty"`
 }
