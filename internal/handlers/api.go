@@ -5,55 +5,89 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"website-summarizer/internal/db"
 	"website-summarizer/internal/models"
 	"website-summarizer/internal/services"
 )
 
+// HandleChat is now just the "controller" that manages the flow.
 func HandleChat(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-
 	var req models.UserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		json.NewEncoder(w).Encode(map[string]string{"error": "Invalid request"})
+		respondError(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
 
-	// 1. Scrape
+	// 1. Cache Check
+	if summary, err := db.GetSummary(req.URL); err == nil {
+		log.Println("DEBUG: Cache hit.")
+		respondJSON(w, map[string]string{"gemini_summary": summary, "status": "Cached"})
+		return
+	}
+
+	// 2. Scrape Content
 	content, err := services.FetchWebpage(req.URL)
 	if err != nil || content == "" {
-		json.NewEncoder(w).Encode(map[string]string{"error": "Could not scrape website"})
+		respondError(w, "Could not scrape website", http.StatusInternalServerError)
 		return
 	}
 
-	prompt := fmt.Sprintf("Summarize this in 3 sentences: %s", content)
-	var answer string
+	// 3. AI Processing
+	answer, status := routeAI(req.Model, content)
 
-	var status string
-	// --- NEW LOGIC START ---
-	// If the user specifically picks 'ollama', use it.
-	// Otherwise, try Gemini, and fallback to Ollama if it fails.
-	if req.Model == "ollama" {
-		log.Println("DEBUG: System is routing to Ollama (Local).")
-		answer, err = services.AskOllama(prompt)
-	} else {
-		log.Println("DEBUG: System is routing to Gemini (Cloud).")
-		answer, err = services.AskGemini(prompt)
-
-		// The Fallback: If Gemini hits a rate limit or fails, switch to local model
-		if err != nil {
-			log.Printf("DEBUG: Gemini failed (%v), triggering Failover to Ollama.", err)
-			status = "Gemini failed, switching to local Ollama..."
-			answer, err = services.AskOllama(prompt)
+	// 4. Persistence
+	if answer != "" {
+		if err := db.SaveSummary(req.URL, answer, req.Model); err != nil {
+			log.Printf("ERROR: DB save failed: %v", err)
 		}
-	}
-	// --- NEW LOGIC END ---
-
-	// Final error check if both models fail
-	if err != nil || answer == "" {
-		json.NewEncoder(w).Encode(map[string]string{"error": "AI service failure"})
+	} else {
+		respondError(w, "AI service failed to generate summary", http.StatusInternalServerError)
 		return
 	}
 
-	// 3. Respond
-	json.NewEncoder(w).Encode(map[string]string{"gemini_summary": answer, "status": status})
+	// 5. Final Response
+	respondJSON(w, map[string]string{"gemini_summary": answer, "status": status})
+}
+
+// routeAI handles the logic of which model to pick and the failover.
+func routeAI(model, content string) (string, string) {
+	prompt := fmt.Sprintf("Summarize this in 3 sentences: %s", content)
+
+	// Option A: Explicitly request Ollama
+	if model == "ollama" {
+		log.Println("DEBUG: Routing to Ollama.")
+		ans, err := services.AskOllama(prompt)
+		if err != nil {
+			return "", ""
+		}
+		return ans, "Success"
+	}
+
+	// Option B: Try Gemini with Failover
+	log.Println("DEBUG: Routing to Gemini.")
+	ans, err := services.AskGemini(prompt)
+	if err == nil {
+		return ans, "Success"
+	}
+
+	// Failover happens here
+	log.Printf("DEBUG: Gemini failed (%v). Switching to Ollama.", err)
+	ans, err = services.AskOllama(prompt)
+	if err != nil {
+		return "", ""
+	}
+	return ans, "Gemini failed, switched to local Ollama"
+}
+
+// --- Helper Functions to keep code clean ---
+
+func respondJSON(w http.ResponseWriter, data interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(data)
+}
+
+func respondError(w http.ResponseWriter, message string, code int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }

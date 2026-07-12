@@ -5,10 +5,12 @@ import (
 	"log"
 	"net/http"
 
+	"website-summarizer/internal/db"
 	"website-summarizer/internal/handlers"
 )
 
 func main() {
+	db.InitDB()
 	// Register the endpoint
 	http.HandleFunc("/api/chat", handlers.HandleChat)
 
