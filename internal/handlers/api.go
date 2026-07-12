@@ -25,15 +25,35 @@ func HandleChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2. Summarize (Add error checking here!)
 	prompt := fmt.Sprintf("Summarize this in 3 sentences: %s", content)
-	answer, err := services.AskGemini(prompt) // Ensure this returns an error
+	var answer string
+
+	var status string
+	// --- NEW LOGIC START ---
+	// If the user specifically picks 'ollama', use it.
+	// Otherwise, try Gemini, and fallback to Ollama if it fails.
+	if req.Model == "ollama" {
+		log.Println("DEBUG: System is routing to Ollama (Local).")
+		answer, err = services.AskOllama(prompt)
+	} else {
+		log.Println("DEBUG: System is routing to Gemini (Cloud).")
+		answer, err = services.AskGemini(prompt)
+
+		// The Fallback: If Gemini hits a rate limit or fails, switch to local model
+		if err != nil {
+			log.Printf("DEBUG: Gemini failed (%v), triggering Failover to Ollama.", err)
+			status = "Gemini failed, switching to local Ollama..."
+			answer, err = services.AskOllama(prompt)
+		}
+	}
+	// --- NEW LOGIC END ---
+
+	// Final error check if both models fail
 	if err != nil || answer == "" {
-		log.Printf("Gemini Error: %v", err) // Check your terminal for this!
-		json.NewEncoder(w).Encode(map[string]string{"error": "Gemini failed to generate summary"})
+		json.NewEncoder(w).Encode(map[string]string{"error": "AI service failure"})
 		return
 	}
 
 	// 3. Respond
-	json.NewEncoder(w).Encode(map[string]string{"gemini_summary": answer})
+	json.NewEncoder(w).Encode(map[string]string{"gemini_summary": answer, "status": status})
 }

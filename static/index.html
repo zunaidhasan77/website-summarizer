@@ -70,8 +70,19 @@
     <div class="card">
         <h2>Web Summarizer</h2>
         <input type="url" id="urlInput" placeholder="https://example.com">
+        <label for="modelSelect" style="display:block; margin-bottom:5px; font-size: 0.9em; color:#aaa;">Choose
+            Model:</label>
+        <select id="modelSelect"
+            style="width: 100%; padding: 10px; margin-bottom: 15px; border-radius: 6px; background: #2c2c2c; color: white; border: 1px solid #333;">
+            <option value="gemini">Gemini (Cloud)</option>
+            <option value="ollama">Ollama (Local)</option>
+        </select>
+
         <button id="btn" onclick="summarize()">Summarize Website</button>
         <div id="loader">Processing... this might take a while.</div>
+        <div id="statusMsg" style="color: #ffcc00; font-size: 0.9em; margin-bottom: 10px; text-align: center;"></div>
+
+        <div id="result"></div>
         <div id="result"></div>
     </div>
 
@@ -80,7 +91,10 @@
             const btn = document.getElementById('btn');
             const loader = document.getElementById('loader');
             const result = document.getElementById('result');
+
+            // Get the URL and the chosen Model
             const url = document.getElementById('urlInput').value;
+            const model = document.getElementById('modelSelect').value;
 
             btn.disabled = true;
             loader.style.display = 'block';
@@ -90,17 +104,16 @@
                 const res = await fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: url })
+                    // Include 'model' in the JSON body
+                    body: JSON.stringify({ url: url, model: model })
                 });
-                const data = await res.json();
-                // ADD THIS LINE TO DEBUG:
-                console.log("Server response:", data);
 
-                // Check if the property exists
+                const data = await res.json();
+
                 if (data.gemini_summary) {
                     result.innerText = data.gemini_summary;
                 } else {
-                    result.innerText = "Error: API did not return 'gemini_summary'. Check console.";
+                    result.innerText = "Error: " + (data.error || "Unknown error");
                 }
             } catch (e) {
                 result.innerText = "Error connecting to server.";

@@ -1,7 +1,8 @@
 package models
 
 type UserRequest struct {
-	URL string `json:"url"`
+	URL   string `json:"url"`
+	Model string `json:"model"`
 }
 
 type APIResponse struct {
