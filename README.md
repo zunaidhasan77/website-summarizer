@@ -49,6 +49,7 @@ The application employs a "Traffic Controller" pattern where the frontend manage
 
 ## How it Works
 **Cache Lookup:** The backend first checks the SQLite database for a saved summary of the requested URL. If found, it returns the result instantly.
+
 **Scrape:** The Go backend fetches the URL and cleans the HTML tags using Regex to ensure only readable text is processed.
 
 **Route:** The UI sends the URL and your preferred model to the backend.
