@@ -16,13 +16,14 @@ A robust, full-stack web application designed to fetch website content and provi
 * **Backend:** Go (Golang)
 * **Frontend:** HTML5, CSS3, Vanilla JavaScript
 * **AI Engines:** Google Gemini API, Ollama (Llama3)
+* **Database:** SQLite (via `glebarez/go-sqlite`)
 * **Infrastructure:** Local HTTP server
 
 ## 🧠 System Architecture
 
 
 
-The application employs a "Traffic Controller" pattern where the frontend manages the failover logic, ensuring a smooth user experience even if a cloud provider goes down.
+The application employs a "Traffic Controller" pattern where the frontend manages the failover logic. We now utilize a **Cache-Aside** strategy: the system checks the database for a pre-existing summary before ever hitting the AI models, ensuring maximum speed and efficiency.
 
 ## ⚙️ Installation & Setup
 
@@ -47,6 +48,7 @@ The application employs a "Traffic Controller" pattern where the frontend manage
    Open your browser to http://localhost:8080.
 
 ## How it Works
+**Cache Lookup:** The backend first checks the SQLite database for a saved summary of the requested URL. If found, it returns the result instantly.
 **Scrape:** The Go backend fetches the URL and cleans the HTML tags using Regex to ensure only readable text is processed.
 
 **Route:** The UI sends the URL and your preferred model to the backend.
@@ -58,3 +60,5 @@ The application employs a "Traffic Controller" pattern where the frontend manage
 * If Gemini fails, the frontend dynamically alerts you ("Gemini failed, switching to local Ollama...") and triggers a secondary request to Ollama.
 
 **Display:** The summary is injected into the clean UI with real-time status updates that automatically fade after the response is received.
+
+*Built with care for speed, reliability, and privacy.*
