@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Website Summarizer</title>
+    <title>AI Website Assistant</title>
     <style>
         body {
             font-family: sans-serif;
@@ -24,10 +24,10 @@
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
         }
 
-        input {
+        input, select {
             width: 100%;
             padding: 12px;
-            margin: 10px 0;
+            margin: 10px 0 20px 0;
             border-radius: 6px;
             border: 1px solid #333;
             background: #2c2c2c;
@@ -35,18 +35,28 @@
             box-sizing: border-box;
         }
 
+        label {
+            display: block;
+            margin-bottom: 2px;
+            font-size: 0.9em;
+            color: #aaa;
+        }
+
         button {
             width: 100%;
             padding: 12px;
             background: #bb86fc;
+            color: #000;
             border: none;
             border-radius: 6px;
             cursor: pointer;
             font-weight: bold;
+            margin-top: 10px;
         }
 
         button:disabled {
             background: #555;
+            cursor: not-allowed;
         }
 
         #loader {
@@ -61,6 +71,10 @@
             line-height: 1.6;
             white-space: pre-wrap;
             color: #ccc;
+            background: #252525;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #bb86fc;
         }
     </style>
 </head>
@@ -68,55 +82,101 @@
 <body>
 
     <div class="card">
-        <h2>Web Summarizer</h2>
-        <input type="url" id="urlInput" placeholder="https://example.com">
-        <label for="modelSelect" style="display:block; margin-bottom:5px; font-size: 0.9em; color:#aaa;">Choose
-            Model:</label>
-        <select id="modelSelect"
-            style="width: 100%; padding: 10px; margin-bottom: 15px; border-radius: 6px; background: #2c2c2c; color: white; border: 1px solid #333;">
+        <h2>Web Assistant</h2>
+
+        <label for="modeSelect">Choose Action:</label>
+        <select id="modeSelect" onchange="toggleInputs()">
+            <option value="chat">Ask a Question (RAG Chat)</option>
+            <option value="summarize">Summarize Website</option>
+        </select>
+
+        <label for="urlInput">Target URL:</label>
+        <input type="url" id="urlInput" placeholder="https://example.com" required>
+
+        <div id="chatSection">
+            <label for="chatInput">Your Question:</label>
+            <input type="text" id="chatInput" placeholder="What does this website say about...">
+        </div>
+
+        <label for="modelSelect">Choose Model:</label>
+        <select id="modelSelect">
             <option value="gemini">Gemini (Cloud)</option>
             <option value="ollama">Ollama (Local)</option>
         </select>
 
-        <button id="btn" onclick="summarize()">Summarize Website</button>
+        <button id="btn" onclick="submitRequest()">Run Request</button>
         <div id="loader">Processing... this might take a while.</div>
-        <div id="statusMsg" style="color: #ffcc00; font-size: 0.9em; margin-bottom: 10px; text-align: center;"></div>
-
-        <div id="result"></div>
-        <div id="result"></div>
+        
+        <div id="result" style="display: none;"></div>
     </div>
 
     <script>
-        async function summarize() {
+        // Toggles the visibility of the Chat Input based on the dropdown selection
+        function toggleInputs() {
+            const mode = document.getElementById('modeSelect').value;
+            const chatSection = document.getElementById('chatSection');
+            
+            if (mode === 'chat') {
+                chatSection.style.display = 'block';
+            } else {
+                chatSection.style.display = 'none';
+            }
+        }
+
+        // Run once on load to ensure the correct inputs are visible
+        toggleInputs();
+
+        async function submitRequest() {
             const btn = document.getElementById('btn');
             const loader = document.getElementById('loader');
             const result = document.getElementById('result');
 
-            // Get the URL and the chosen Model
+            const mode = document.getElementById('modeSelect').value;
             const url = document.getElementById('urlInput').value;
+            const message = document.getElementById('chatInput').value;
             const model = document.getElementById('modelSelect').value;
+
+            if (!url) {
+                alert("Please enter a target URL.");
+                return;
+            }
 
             btn.disabled = true;
             loader.style.display = 'block';
+            result.style.display = 'none';
             result.innerText = '';
 
             try {
+                const payload = {
+                    mode: mode,
+                    url: url,
+                    message: message,
+                    model: model
+                };
+
                 const res = await fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    // Include 'model' in the JSON body
-                    body: JSON.stringify({ url: url, model: model })
+                    body: JSON.stringify(payload)
                 });
 
                 const data = await res.json();
+                result.style.display = 'block';
 
-                if (data.gemini_summary) {
-                    result.innerText = data.gemini_summary;
+                // Look at the clean response handling here!
+                if (data.success) {
+                    if (data.gemini_summary) {
+                        result.innerText = data.gemini_summary;
+                    } else if (data.chat_reply) {
+                        result.innerText = data.chat_reply;
+                    }
                 } else {
-                    result.innerText = "Error: " + (data.error || "Unknown error");
+                    result.innerText = "Error: " + (data.error || "Unknown server error");
                 }
             } catch (e) {
-                result.innerText = "Error connecting to server.";
+                result.style.display = 'block';
+                result.innerText = "Error connecting to server. Is the Go backend running?";
+                console.error("Fetch error:", e);
             } finally {
                 btn.disabled = false;
                 loader.style.display = 'none';

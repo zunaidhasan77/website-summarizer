@@ -11,7 +11,11 @@ import (
 
 func main() {
 	db.InitDB()
-	// Register the endpoint
+
+	db.InitQdrant()
+
+	db.EnsureCollection("website_knowledge")
+
 	http.HandleFunc("/api/chat", handlers.HandleChat)
 
 	http.Handle("/", http.FileServer(http.Dir("./static")))

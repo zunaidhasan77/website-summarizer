@@ -5,89 +5,127 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
+
 	"website-summarizer/internal/db"
 	"website-summarizer/internal/models"
 	"website-summarizer/internal/services"
 )
 
-// HandleChat is now just the "controller" that manages the flow.
 func HandleChat(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
 	var req models.UserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, "Invalid request", http.StatusBadRequest)
+		log.Printf("API Error: Invalid request body: %v", err)
+		json.NewEncoder(w).Encode(models.APIResponse{Success: false, Error: "Invalid JSON request"})
 		return
 	}
 
-	// 1. Cache Check
-	if summary, err := db.GetSummary(req.URL); err == nil {
-		log.Println("DEBUG: Cache hit.")
-		respondJSON(w, map[string]string{"gemini_summary": summary, "status": "Cached"})
-		return
+	// Default to summarize if mode is missing
+	if req.Mode == "" {
+		req.Mode = "summarize"
 	}
 
-	// 2. Scrape Content
-	content, err := services.FetchWebpage(req.URL)
-	if err != nil || content == "" {
-		respondError(w, "Could not scrape website", http.StatusInternalServerError)
-		return
+	log.Printf("Processing request - Mode: %s, URL: %s, Model: %s", req.Mode, req.URL, req.Model)
+
+	var finalPrompt string
+
+	// 1. Build the Prompt
+	if req.Mode == "summarize" {
+		content, err := services.FetchWebpage(req.URL)
+		if err != nil {
+			json.NewEncoder(w).Encode(models.APIResponse{Success: false, Error: "Failed to read website"})
+			return
+		}
+		if len(content) > 5000 {
+			content = content[:5000] + "... [truncated]"
+		}
+		finalPrompt = fmt.Sprintf("You are an expert summarizer. Please provide a clear, 3-paragraph summary of the following website content:\n\n%s", content)
+	} else {
+
+		// --- JUST-IN-TIME INGESTION ---
+		// This makes the system "flow" automatically from the prompt
+		log.Printf("Just-in-Time Ingestion: %s", req.URL)
+		err := services.IngestURL(req.URL)
+		if err != nil {
+			log.Printf("Ingestion error: %v", err)
+			json.NewEncoder(w).Encode(models.APIResponse{Success: false, Error: "Failed to ingest URL automatically"})
+			return
+		}
+
+		// --- RAG QUERY ---
+		if strings.TrimSpace(req.Message) == "" {
+			json.NewEncoder(w).Encode(models.APIResponse{Success: false, Error: "No question provided"})
+			return
+		}
+		queryVector, err := services.GetEmbedding(req.Message)
+		if err != nil {
+			json.NewEncoder(w).Encode(models.APIResponse{Success: false, Error: "Failed to embed question"})
+			return
+		}
+		chunks, err := db.SearchChunks("website_knowledge", queryVector, 3)
+		if err != nil {
+			json.NewEncoder(w).Encode(models.APIResponse{Success: false, Error: "Database search failed"})
+			return
+		}
+		contextData := strings.Join(chunks, "\n\n---\n\n")
+		finalPrompt = fmt.Sprintf("You are a helpful assistant. Use the following context to answer the user's question. If the answer is not in the context, say 'I cannot answer this based on the provided website'.\n\nCONTEXT:\n%s\n\nQUESTION:\n%s", contextData, req.Message)
 	}
 
-	// 3. AI Processing
-	answer, status := routeAI(req.Model, content)
+	// 2. Call your specific Service functions
+	var aiResponse string
+	var err error
 
-	// 4. Persistence
-	if answer != "" {
-		if err := db.SaveSummary(req.URL, answer, req.Model); err != nil {
-			log.Printf("ERROR: DB save failed: %v", err)
+	if req.Model == "gemini" {
+		aiResponse, err = services.AskGemini(finalPrompt)
+
+		if err != nil {
+			log.Printf("CRITICAL: Gemini call failed (%v). Triggering fallback to Ollama...", err)
+
+			// Fallback: Try Ollama
+			aiResponse, err = services.AskOllama(finalPrompt)
+
+			if err != nil {
+				log.Printf("FALLBACK FAILED: Ollama also returned an error: %v", err)
+			} else {
+				log.Println("SUCCESS: Fallback to Ollama successful.")
+			}
 		}
 	} else {
-		respondError(w, "AI service failed to generate summary", http.StatusInternalServerError)
+		aiResponse, err = services.AskOllama(finalPrompt)
+	}
+
+	if err != nil {
+		log.Printf("LLM Generation Error: %v", err)
+		json.NewEncoder(w).Encode(models.APIResponse{Success: false, Error: "AI generation failed: " + err.Error()})
 		return
 	}
 
-	// 5. Final Response
-	respondJSON(w, map[string]string{"gemini_summary": answer, "status": status})
+	// 3. Return the actual AI response
+	if req.Mode == "summarize" {
+		json.NewEncoder(w).Encode(models.APIResponse{
+			Success:       true,
+			GeminiSummary: aiResponse,
+		})
+	} else {
+		json.NewEncoder(w).Encode(models.APIResponse{
+			Success:   true,
+			ChatReply: aiResponse,
+		})
+	}
 }
 
-// routeAI handles the logic of which model to pick and the failover.
-func routeAI(model, content string) (string, string) {
-	prompt := fmt.Sprintf("Summarize this in 3 sentences: %s", content)
-
-	// Option A: Explicitly request Ollama
-	if model == "ollama" {
-		log.Println("DEBUG: Routing to Ollama.")
-		ans, err := services.AskOllama(prompt)
-		if err != nil {
-			return "", ""
-		}
-		return ans, "Success"
+func HandleIngest(w http.ResponseWriter, r *http.Request) {
+	url := r.URL.Query().Get("url")
+	if url == "" {
+		http.Error(w, "Missing url parameter", http.StatusBadRequest)
+		return
 	}
 
-	// Option B: Try Gemini with Failover
-	log.Println("DEBUG: Routing to Gemini.")
-	ans, err := services.AskGemini(prompt)
-	if err == nil {
-		return ans, "Success"
+	if err := services.IngestURL(url); err != nil {
+		http.Error(w, "Ingestion failed: "+err.Error(), http.StatusInternalServerError)
+		return
 	}
-
-	// Failover happens here
-	log.Printf("DEBUG: Gemini failed (%v). Switching to Ollama.", err)
-	ans, err = services.AskOllama(prompt)
-	if err != nil {
-		return "", ""
-	}
-	return ans, "Gemini failed, switched to local Ollama"
-}
-
-// --- Helper Functions to keep code clean ---
-
-func respondJSON(w http.ResponseWriter, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(data)
-}
-
-func respondError(w http.ResponseWriter, message string, code int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(map[string]string{"error": message})
+	w.Write([]byte("Ingestion successful! Check your database."))
 }
