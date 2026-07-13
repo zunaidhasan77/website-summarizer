@@ -1,41 +1,45 @@
-# 🌐 AI Website Summarizer
+# 🌐 AI Website Assistant (RAG Enabled)
 
-A robust, full-stack web application designed to fetch website content and provide concise AI-driven summaries. This project prioritizes reliability and privacy by utilizing a dual-model architecture.
+A robust, full-stack AI assistant that bridges the gap between static web content and intelligent, contextual conversation. This application allows users to perform broad summarizations or engage in deep, context-aware chats with any website.
 
 ## 🚀 Key Features
 
-* **HTML Scraping:** Cleans raw website data to extract readable text, ignoring scripts, styles, and navigation noise.
-* **Dual-AI Architecture:**
-    * **Cloud Mode:** Uses Google Gemini API for fast, high-quality summarization.
-    * **Local Mode:** Uses Ollama (running `llama3`) for private, unlimited, and offline processing.
-* **Intelligent Failover:** Automatically detects if the Gemini API is rate-limited or unavailable and seamlessly switches to your local Ollama instance with real-time UI updates.
-* **Dynamic UI:** Real-time status notifications keep you informed when the system switches models or encounters errors.
+* **Dual-Mode AI:**
+    * **Summarize Mode:** Instant, concise 3-paragraph summaries of any URL.
+    * **Chat Mode (RAG):** Ask specific questions about a website. The system retrieves relevant context chunks and answers based on facts, not hallucinations.
+* **Just-in-Time Ingestion:** No manual database setup required. The system automatically ingests and vectorizes the target website the moment you ask a question.
+* **Intelligent Failover:** Automatically detects if the Gemini API is rate-limited or unavailable and seamlessly switches to your local Ollama instance with logging for transparency.
+* **Vector Search:** Powered by **Qdrant**, enabling high-speed semantic search across website content.
 
 ## 🛠 Tech Stack
 
 * **Backend:** Go (Golang)
 * **Frontend:** HTML5, CSS3, Vanilla JavaScript
 * **AI Engines:** Google Gemini API, Ollama (Llama3)
-* **Database:** SQLite (via `glebarez/go-sqlite`)
-* **Infrastructure:** Local HTTP server
+* **Vector Database:** Qdrant
+* **Storage:** SQLite
 
 ## 🧠 System Architecture
 
-
-
-The application employs a "Traffic Controller" pattern where the frontend manages the failover logic. We now utilize a **Cache-Aside** strategy: the system checks the database for a pre-existing summary before ever hitting the AI models, ensuring maximum speed and efficiency.
+The application utilizes a **RAG (Retrieval-Augmented Generation)** pipeline. When a user requests a chat:
+1. **Ingest:** The URL is scraped and content is broken into searchable chunks.
+2. **Vectorize:** Chunks are turned into embeddings and stored in Qdrant.
+3. **Retrieve:** The system searches Qdrant for the most relevant context based on the user's question.
+4. **Augment:** The final prompt sent to the LLM is injected with the retrieved context, ensuring the AI answers using only the provided website data.
 
 ## ⚙️ Installation & Setup
 
 ### 1. Prerequisites
 * [Go](https://go.dev/)
 * [Ollama](https://ollama.com/)
+* [Qdrant](https://qdrant.tech/) (Docker: `docker run -p 6333:6333 qdrant/qdrant`)
 
 ### 2. Setup
 1. **Clone the repository:**
    ```bash
-   git clone <your-repo-url>
+   git clone https://github.com/zunaidhasan77/website-summarizer.git
    cd website-summarizer
+   go mod tidy
 2. **Download the local model:**
    ```bash
    ollama pull llama3
@@ -48,18 +52,11 @@ The application employs a "Traffic Controller" pattern where the frontend manage
    Open your browser to http://localhost:8080.
 
 ## How it Works
-**Cache Lookup:** The backend first checks the SQLite database for a saved summary of the requested URL. If found, it returns the result instantly.
+**Summarize Flow:** The backend scrapes the URL, truncates content to fit context limits, and requests a summary from the chosen AI model.
 
-**Scrape:** The Go backend fetches the URL and cleans the HTML tags using Regex to ensure only readable text is processed.
+**Chat Flow** he backend performs a "Just-in-Time" ingestion (vectorizing the page), performs a semantic search to find relevant context, and sends a context-aware prompt to the LLM.
 
-**Route:** The UI sends the URL and your preferred model to the backend.
+**Failover Logic:** If the primary model (Gemini) returns an error, the backend logs the failure and automatically retries the request using the local Ollama instance.
 
-**Summarize & Failover:**
-
-* If Gemini is selected and succeeds, you get your result.
-
-* If Gemini fails, the frontend dynamically alerts you ("Gemini failed, switching to local Ollama...") and triggers a secondary request to Ollama.
-
-**Display:** The summary is injected into the clean UI with real-time status updates that automatically fade after the response is received.
 
 *Built with care for speed, reliability, and privacy.*
